@@ -7,7 +7,9 @@ from dotenv import load_dotenv
 from pymongo import MongoClient
 
 import datetime
-import subprocess 
+import subprocess
+
+import pandas as pd
 
 load_dotenv()
 MONGO_URI = os.getenv("MONGO_URI")
@@ -50,6 +52,42 @@ def info(texto):
 def separador():
     print(f"  {LINEA}")
 
+def mostrar_tabla(datos, columnas=None):
+    """
+    Muestra una lista de diccionarios como tabla usando pandas,
+    con columnas bien separadas por '|' y una linea divisoria
+    bajo el encabezado para que se vea ordenada.
+    - datos: lista de dicts
+    - columnas: lista opcional con el orden/nombre de columnas a mostrar
+    """
+    if not datos:
+        info("No hay datos para mostrar.")
+        return
+
+    df = pd.DataFrame(datos)
+
+    if columnas:
+        columnas_existentes = [c for c in columnas if c in df.columns]
+        df = df[columnas_existentes]
+
+    # Ancho de cada columna = el mayor entre el titulo y el dato mas largo
+    anchos = {
+        col: max(len(str(col)), df[col].astype(str).map(len).max())
+        for col in df.columns
+    }
+
+    sep = "  |  "
+
+    encabezado = sep.join(str(col).center(anchos[col]) for col in df.columns)
+    linea_div  = sep.join("-" * anchos[col] for col in df.columns)
+
+    print()
+    print(f"  {encabezado}")
+    print(f"  {linea_div}")
+    for _, fila in df.iterrows():
+        linea = sep.join(str(fila[col]).ljust(anchos[col]) for col in df.columns)
+        print(f"  {linea}")
+
 def pausa():
     input("\n  Presiona Enter para volver al menu...")
 
@@ -88,15 +126,17 @@ def listar_todos_eventos():
     eventos = list(db["eventos"].find({}, {"_id": 0}))
     info(f"Se encontraron {len(eventos)} eventos registrados.")
     separador()
-    for e in eventos:
-        fecha = e["fecha"][:10]
-        total = len(e.get("invitados", []))
-        print(f"\n  >>  {e['nombre']}")
-        print(f"      Codigo     : {e['codigo']}")
-        print(f"      Fecha      : {fecha}")
-        print(f"      Lugar      : {e['lugar']}")
-        print(f"      Categoria  : {e['categoria'].capitalize()}")
-        print(f"      Invitados  : {total}")
+
+    filas = [{
+        "Nombre": e["nombre"],
+        "Codigo": e["codigo"],
+        "Fecha": e["fecha"][:10],
+        "Lugar": e["lugar"],
+        "Categoria": e["categoria"].capitalize(),
+        "Invitados": len(e.get("invitados", []))
+    } for e in eventos]
+
+    mostrar_tabla(filas)
     separador()
     pausa()
 
@@ -120,12 +160,14 @@ def filtrar_eventos_por_categoria():
                                         "fecha": 1, "lugar": 1}))
     subtitulo(f"Eventos de categoria: {categoria.upper()}  ({len(eventos)} resultados)")
 
-    if not eventos:
-        info("No se encontraron eventos para esta categoria.")
-    else:
-        for e in eventos:
-            print(f"\n  >>  [{e['codigo']}]  {e['nombre']}")
-            print(f"       Fecha : {e['fecha'][:10]}   |   Lugar : {e['lugar']}")
+    filas = [{
+        "Codigo": e["codigo"],
+        "Nombre": e["nombre"],
+        "Fecha": e["fecha"][:10],
+        "Lugar": e["lugar"]
+    } for e in eventos]
+
+    mostrar_tabla(filas)
     separador()
     pausa()
 
@@ -136,11 +178,15 @@ def listar_invitados_activos():
                                             "empresa": 1, "correo": 1}))
     info(f"Se encontraron {len(invitados)} invitados activos.")
     separador()
-    for inv in invitados:
-        print(f"\n  [ACTIVO]  {inv['nombre']}")
-        print(f"       RUT     : {inv['rut']}")
-        print(f"       Empresa : {inv['empresa']}")
-        print(f"       Correo  : {inv['correo']}")
+
+    filas = [{
+        "Nombre": inv["nombre"],
+        "RUT": inv["rut"],
+        "Empresa": inv["empresa"],
+        "Correo": inv["correo"]
+    } for inv in invitados]
+
+    mostrar_tabla(filas)
     separador()
     pausa()
 
@@ -151,11 +197,15 @@ def listar_invitados_bloqueados():
                                             "empresa": 1, "correo": 1}))
     info(f"Se encontraron {len(invitados)} invitados bloqueados.")
     separador()
-    for inv in invitados:
-        print(f"\n  [BLOQUEADO]  {inv['nombre']}")
-        print(f"       RUT     : {inv['rut']}")
-        print(f"       Empresa : {inv['empresa']}")
-        print(f"       Correo  : {inv['correo']}")
+
+    filas = [{
+        "Nombre": inv["nombre"],
+        "RUT": inv["rut"],
+        "Empresa": inv["empresa"],
+        "Correo": inv["correo"]
+    } for inv in invitados]
+
+    mostrar_tabla(filas)
     separador()
     pausa()
 
@@ -177,15 +227,15 @@ def buscar_invitado_por_nombre():
                                              "empresa": 1, "correo": 1, "estado": 1}))
     subtitulo(f"Resultados para: \"{termino}\"  ({len(resultados)} encontrados)")
 
-    if not resultados:
-        info("Sin coincidencias. Intenta con otro termino.")
-    else:
-        for inv in resultados:
-            estado_txt = "ACTIVO" if inv["estado"] == "activo" else "BLOQUEADO"
-            print(f"\n  [{estado_txt}]  {inv['nombre']}")
-            print(f"       RUT     : {inv['rut']}")
-            print(f"       Empresa : {inv['empresa']}")
-            print(f"       Correo  : {inv['correo']}")
+    filas = [{
+        "Estado": "ACTIVO" if inv["estado"] == "activo" else "BLOQUEADO",
+        "Nombre": inv["nombre"],
+        "RUT": inv["rut"],
+        "Empresa": inv["empresa"],
+        "Correo": inv["correo"]
+    } for inv in resultados]
+
+    mostrar_tabla(filas)
     separador()
     pausa()
 
@@ -205,14 +255,14 @@ def buscar_por_dominio_correo():
                                              "correo": 1, "empresa": 1, "estado": 1}))
     subtitulo(f"Invitados con correo @{dominio}  ({len(resultados)} encontrados)")
 
-    if not resultados:
-        info("Sin resultados para ese dominio.")
-    else:
-        for inv in resultados:
-            estado_txt = "ACTIVO" if inv["estado"] == "activo" else "BLOQUEADO"
-            print(f"\n  [{estado_txt}]  {inv['nombre']}")
-            print(f"       Correo  : {inv['correo']}")
-            print(f"       Empresa : {inv['empresa']}")
+    filas = [{
+        "Estado": "ACTIVO" if inv["estado"] == "activo" else "BLOQUEADO",
+        "Nombre": inv["nombre"],
+        "Correo": inv["correo"],
+        "Empresa": inv["empresa"]
+    } for inv in resultados]
+
+    mostrar_tabla(filas)
     separador()
     pausa()
 
@@ -230,15 +280,15 @@ def buscar_eventos_por_nombre():
                                            "fecha": 1, "lugar": 1, "categoria": 1}))
     subtitulo(f"Eventos que contienen: \"{termino}\"  ({len(resultados)} encontrados)")
 
-    if not resultados:
-        info("Sin coincidencias. Intenta con otra palabra.")
-    else:
-        for e in resultados:
-            print(f"\n  >>  {e['nombre']}")
-            print(f"       Codigo    : {e['codigo']}")
-            print(f"       Fecha     : {e['fecha'][:10]}")
-            print(f"       Lugar     : {e['lugar']}")
-            print(f"       Categoria : {e['categoria'].capitalize()}")
+    filas = [{
+        "Nombre": e["nombre"],
+        "Codigo": e["codigo"],
+        "Fecha": e["fecha"][:10],
+        "Lugar": e["lugar"],
+        "Categoria": e["categoria"].capitalize()
+    } for e in resultados]
+
+    mostrar_tabla(filas)
     separador()
     pausa()
 
@@ -272,19 +322,24 @@ def validar_acceso_invitado():
         pausa()
         return
 
-    print(f"\n  Invitado : {invitado['nombre']}")
-    print(f"  Evento   : {evento_existe['nombre']}")
-    separador()
-
     if invitado["estado"] == "bloqueado":
-        print("\n  >> ACCESO DENEGADO")
-        info("El invitado tiene estado BLOQUEADO en el sistema.")
+        acceso = "DENEGADO"
+        motivo = "El invitado tiene estado BLOQUEADO en el sistema."
     elif evento_confirmado:
-        print("\n  >> ACCESO PERMITIDO")
-        info("El invitado esta CONFIRMADO y ACTIVO en el sistema.")
+        acceso = "PERMITIDO"
+        motivo = "El invitado esta CONFIRMADO y ACTIVO en el sistema."
     else:
-        print("\n  >> ACCESO DENEGADO")
-        info("El invitado no esta confirmado para este evento.")
+        acceso = "DENEGADO"
+        motivo = "El invitado no esta confirmado para este evento."
+
+    filas = [{
+        "Invitado": invitado["nombre"],
+        "Evento": evento_existe["nombre"],
+        "Acceso": acceso,
+        "Motivo": motivo
+    }]
+
+    mostrar_tabla(filas)
     separador()
     pausa()
 
@@ -300,6 +355,7 @@ def ver_invitados_de_evento():
 
     subtitulo(f"Evento: {evento['nombre']}")
     confirmados = pendientes = rechazados = 0
+    filas = []
 
     for inv in evento.get("invitados", []):
         estado = inv["estado"]
@@ -307,17 +363,19 @@ def ver_invitados_de_evento():
         nombre = datos["nombre"] if datos else "Desconocido"
 
         if estado == "confirmado":
-            tag = "[CONFIRMADO]"
             confirmados += 1
         elif estado == "pendiente":
-            tag = "[PENDIENTE] "
             pendientes += 1
         else:
-            tag = "[RECHAZADO] "
             rechazados += 1
 
-        print(f"  {tag}  {nombre:<25}  RUT: {inv['rut']}")
+        filas.append({
+            "Estado": estado.upper(),
+            "Nombre": nombre,
+            "RUT": inv["rut"]
+        })
 
+    mostrar_tabla(filas)
     separador()
     print(f"\n  Resumen  ->  {confirmados} confirmados  |  {pendientes} pendientes  |  {rechazados} rechazados")
     separador()
@@ -342,14 +400,17 @@ def buscar_eventos_de_invitado():
     info(f"Aparece en {len(eventos)} evento(s).")
     separador()
 
-    if not eventos:
-        info("No aparece en ningun evento registrado.")
-    else:
-        for e in eventos:
-            estado_inv = e["invitados"][0]["estado"]
-            tag = "[CONFIRMADO]" if estado_inv == "confirmado" else ("[PENDIENTE] " if estado_inv == "pendiente" else "[RECHAZADO] ")
-            print(f"\n  {tag}  {e['nombre']}")
-            print(f"          Codigo : {e['codigo']}   |   Fecha : {e['fecha'][:10]}")
+    filas = []
+    for e in eventos:
+        estado_inv = e["invitados"][0]["estado"]
+        filas.append({
+            "Estado": estado_inv.upper(),
+            "Evento": e["nombre"],
+            "Codigo": e["codigo"],
+            "Fecha": e["fecha"][:10]
+        })
+
+    mostrar_tabla(filas)
     separador()
     pausa()
 
@@ -375,13 +436,18 @@ def top3_eventos_mas_confirmados():
     resultados = list(db["eventos"].aggregate(pipeline))
     puestos    = ["1er lugar", "2do lugar", "3er lugar"]
 
+    filas = []
     for i, r in enumerate(resultados):
-        print(f"\n  --- {puestos[i].upper()} ---")
-        print(f"    Nombre      : {r['nombre']}")
-        print(f"    Codigo      : {r['_id']}")
-        print(f"    Lugar       : {r['lugar']}")
-        print(f"    Categoria   : {r['categoria'].capitalize()}")
-        print(f"    Confirmados : {r['total']}")
+        filas.append({
+            "Puesto": puestos[i],
+            "Nombre": r["nombre"],
+            "Codigo": r["_id"],
+            "Lugar": r["lugar"],
+            "Categoria": r["categoria"].capitalize(),
+            "Confirmados": r["total"]
+        })
+
+    mostrar_tabla(filas)
     separador()
     pausa()
 
@@ -421,11 +487,14 @@ def lookup_invitados_confirmados_por_evento():
 
     subtitulo(f"Evento: {resultados[0]['evento']}  ({len(resultados)} confirmados)")
 
-    for r in resultados:
-        estado_txt = "ACTIVO" if r["estado_global"] == "activo" else "BLOQUEADO"
-        print(f"\n  [{estado_txt}]  {r['nombre']}")
-        print(f"       Empresa      : {r['empresa']}")
-        print(f"       Correo       : {r['correo']}")
+    filas = [{
+        "Estado": "ACTIVO" if r["estado_global"] == "activo" else "BLOQUEADO",
+        "Nombre": r["nombre"],
+        "Empresa": r["empresa"],
+        "Correo": r["correo"]
+    } for r in resultados]
+
+    mostrar_tabla(filas)
     separador()
     pausa()
 
@@ -438,10 +507,13 @@ def resumen_por_empresa():
     resultados = list(db["invitados"].aggregate(pipeline))
     info(f"{len(resultados)} empresas registradas.")
     separador()
-    print(f"\n  {'Empresa':<22}  {'Invitados':>10}")
-    print(f"  {'-'*22}  {'-'*10}")
-    for r in resultados:
-        print(f"  {r['_id']:<22}  {r['total']:>10}")
+
+    filas = [{
+        "Empresa": r["_id"],
+        "Invitados": r["total"]
+    } for r in resultados]
+
+    mostrar_tabla(filas)
     separador()
     pausa()
 
